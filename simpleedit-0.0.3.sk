@@ -1,0 +1,352 @@
+# SimpleEdit Skript
+# License: https://simpleedit.link/license/
+
+options:
+    prefix: &8[&bSimpleEdit&8]
+
+on load:
+    set {SimpleEdit::marker} to blaze rod named "&6Position Marker"
+
+command /edit:
+    permission: simpleedit.use
+    trigger:
+        if {SimpleEdit::editing::%player's uuid%} is not set:
+            enable_edit_mode(player)
+        else:
+            disable_edit_mode(player)
+
+function enable_edit_mode(p: player):
+    set {SimpleEdit::editing::%{_p}'s uuid%} to true
+    set {_inv} to {_p}'s inventory
+    set {SimpleEdit::inventory::%{_p}'s uuid%::*} to items in {_inv}
+    clear {_p}'s inventory
+    give {_p} {SimpleEdit::marker}
+    send "{@prefix} &aSimpleEdit mode enabled. Use the marker to set positions." to {_p}
+
+function disable_edit_mode(p: player):
+    clear {_p}'s inventory
+    loop {SimpleEdit::inventory::%{_p}'s uuid%::*}:
+        give {_p} loop-value
+    delete {SimpleEdit::inventory::%{_p}'s uuid%::*}
+    delete {SimpleEdit::pos1::%{_p}'s uuid%}
+    delete {SimpleEdit::pos2::%{_p}'s uuid%}
+    delete {SimpleEdit::editing::%{_p}'s uuid%}
+    send "{@prefix} &cSimpleEdit mode disabled. Inventory restored." to {_p}
+
+on left click:
+    if {SimpleEdit::editing::%player's uuid%} is set:
+        if player's tool is {SimpleEdit::marker}:
+            cancel event
+            set_pos1(player, location of event-block)
+
+on right click:
+    if {SimpleEdit::editing::%player's uuid%} is set:
+        if player's tool is {SimpleEdit::marker}:
+            cancel event
+            set_pos2(player, location of event-block)
+
+command /do <text>:
+    permission: simpleedit.use
+    usage: /do <block_name>
+    trigger:
+        if check_edit_mode(player) is false:
+            stop
+        set {_block} to parse_block(player, arg-1)
+        if {_block} is not set:
+            stop
+        fillRegion({SimpleEdit::pos1::%player's uuid%}, {SimpleEdit::pos2::%player's uuid%}, {_block})
+        send "{@prefix} &aFilled the selected region with %arg-1%" to player
+
+command /cube <text>:
+    permission: simpleedit.use
+    usage: /cube <block_name>
+    trigger:
+        if check_edit_mode(player) is false:
+            stop
+        set {_block} to parse_block(player, arg-1)
+        if {_block} is not set:
+            stop
+        createCube({SimpleEdit::pos1::%player's uuid%}, {SimpleEdit::pos2::%player's uuid%}, {_block})
+        send "{@prefix} &aCreated a hollow cube with %arg-1% in the selected region" to player
+
+command /walls <text>:
+    permission: simpleedit.use
+    usage: /walls <block_name>
+    trigger:
+        if check_edit_mode(player) is false:
+            stop
+        set {_block} to parse_block(player, arg-1)
+        if {_block} is not set:
+            stop
+        createWalls({SimpleEdit::pos1::%player's uuid%}, {SimpleEdit::pos2::%player's uuid%}, {_block})
+        send "{@prefix} &aCreated walls with %arg-1% in the selected region (no top/bottom)" to player
+
+command /pos1:
+    permission: simpleedit.use
+    trigger:
+        if check_edit_mode(player) is false:
+            stop
+        set_pos1(player, player's location)
+
+command /pos2:
+    permission: simpleedit.use
+    trigger:
+        if check_edit_mode(player) is false:
+            stop
+        set_pos2(player, player's location)
+
+command /drain:
+    permission: simpleedit.use
+    trigger:
+        if check_edit_mode(player) is false:
+            stop
+        drainRegion({SimpleEdit::pos1::%player's uuid%}, {SimpleEdit::pos2::%player's uuid%})
+        send "{@prefix} &aDrained the selected region" to player
+
+function check_edit_mode(p: player) :: boolean:
+    if {SimpleEdit::editing::%{_p}'s uuid%} is not set:
+        send "{@prefix} &cYou must be in SimpleEdit mode to use this command. Type /edit to enter SimpleEdit mode." to {_p}
+        return false
+    if {SimpleEdit::pos1::%{_p}'s uuid%} is not set:
+        send "{@prefix} &cPlease set position 1 first using the marker tool or /pos1." to {_p}
+        return false
+    if {SimpleEdit::pos2::%{_p}'s uuid%} is not set:
+        send "{@prefix} &cPlease set position 2 first using the marker tool or /pos2." to {_p}
+        return false
+    return true
+
+function parse_block(p: player, block_name: text) :: item:
+    set {_block} to {_block_name} parsed as item
+    if {_block} is not set:
+        send "{@prefix} &cInvalid block name. Please use a valid Minecraft block name." to {_p}
+        return air
+    return {_block}
+
+function set_pos1(p: player, loc: location):
+    set {SimpleEdit::pos1::%{_p}'s uuid%} to {_loc}
+    set {_x} to x-coordinate of {_loc}
+    set {_y} to y-coordinate of {_loc}
+    set {_z} to z-coordinate of {_loc}
+    send "{@prefix} &aPosition 1 set to %{_x}%, %{_y}%, %{_z}%" to {_p}
+
+function set_pos2(p: player, loc: location):
+    set {SimpleEdit::pos2::%{_p}'s uuid%} to {_loc}
+    set {_x} to x-coordinate of {_loc}
+    set {_y} to y-coordinate of {_loc}
+    set {_z} to z-coordinate of {_loc}
+    send "{@prefix} &aPosition 2 set to %{_x}%, %{_y}%, %{_z}%" to {_p}
+
+function fillRegion(pos1: location, pos2: location, block: item):
+    set {_world} to world of {_pos1}
+    set {_minX} to floor(min(x-coordinate of {_pos1}, x-coordinate of {_pos2}))
+    set {_maxX} to floor(max(x-coordinate of {_pos1}, x-coordinate of {_pos2}))
+    set {_minY} to floor(min(y-coordinate of {_pos1}, y-coordinate of {_pos2}))
+    set {_maxY} to floor(max(y-coordinate of {_pos1}, y-coordinate of {_pos2}))
+    set {_minZ} to floor(min(z-coordinate of {_pos1}, z-coordinate of {_pos2}))
+    set {_maxZ} to floor(max(z-coordinate of {_pos1}, z-coordinate of {_pos2}))
+    set {_x} to {_minX}
+    while {_x} <= {_maxX}:
+        set {_y} to {_minY}
+        while {_y} <= {_maxY}:
+            set {_z} to {_minZ}
+            while {_z} <= {_maxZ}:
+                set block at location({_x}, {_y}, {_z}, {_world}) to {_block}
+                add 1 to {_z}
+            add 1 to {_y}
+        add 1 to {_x}
+
+function createCube(pos1: location, pos2: location, block: item):
+    set {_world} to world of {_pos1}
+    set {_minX} to floor(min(x-coordinate of {_pos1}, x-coordinate of {_pos2}))
+    set {_maxX} to floor(max(x-coordinate of {_pos1}, x-coordinate of {_pos2}))
+    set {_minY} to floor(min(y-coordinate of {_pos1}, y-coordinate of {_pos2}))
+    set {_maxY} to floor(max(y-coordinate of {_pos1}, y-coordinate of {_pos2}))
+    set {_minZ} to floor(min(z-coordinate of {_pos1}, z-coordinate of {_pos2}))
+    set {_maxZ} to floor(max(z-coordinate of {_pos1}, z-coordinate of {_pos2}))
+    set {_x} to {_minX}
+    while {_x} <= {_maxX}:
+        set {_y} to {_minY}
+        while {_y} <= {_maxY}:
+            set {_z} to {_minZ}
+            while {_z} <= {_maxZ}:
+                if {_x} is {_minX} or {_maxX}:
+                    set block at location({_x}, {_y}, {_z}, {_world}) to {_block}
+                else if {_y} is {_minY} or {_maxY}:
+                    set block at location({_x}, {_y}, {_z}, {_world}) to {_block}
+                else if {_z} is {_minZ} or {_maxZ}:
+                    set block at location({_x}, {_y}, {_z}, {_world}) to {_block}
+                add 1 to {_z}
+            add 1 to {_y}
+        add 1 to {_x}
+
+function createWalls(pos1: location, pos2: location, block: item):
+    set {_world} to world of {_pos1}
+    set {_minX} to floor(min(x-coordinate of {_pos1}, x-coordinate of {_pos2}))
+    set {_maxX} to floor(max(x-coordinate of {_pos1}, x-coordinate of {_pos2}))
+    set {_minY} to floor(min(y-coordinate of {_pos1}, y-coordinate of {_pos2}))
+    set {_maxY} to floor(max(y-coordinate of {_pos1}, y-coordinate of {_pos2}))
+    set {_minZ} to floor(min(z-coordinate of {_pos1}, z-coordinate of {_pos2}))
+    set {_maxZ} to floor(max(z-coordinate of {_pos1}, z-coordinate of {_pos2}))
+    set {_x} to {_minX}
+    while {_x} <= {_maxX}:
+        set {_y} to {_minY}
+        while {_y} <= {_maxY}:
+            set {_z} to {_minZ}
+            while {_z} <= {_maxZ}:
+                if {_x} is {_minX} or {_maxX}:
+                    set block at location({_x}, {_y}, {_z}, {_world}) to {_block}
+                else if {_z} is {_minZ} or {_maxZ}:
+                    set block at location({_x}, {_y}, {_z}, {_world}) to {_block}
+                add 1 to {_z}
+            add 1 to {_y}
+        add 1 to {_x}
+
+function drainRegion(pos1: location, pos2: location):
+    set {_world} to world of {_pos1}
+    set {_minX} to floor(min(x-coordinate of {_pos1}, x-coordinate of {_pos2}))
+    set {_maxX} to floor(max(x-coordinate of {_pos1}, x-coordinate of {_pos2}))
+    set {_minY} to floor(min(y-coordinate of {_pos1}, y-coordinate of {_pos2}))
+    set {_maxY} to floor(max(y-coordinate of {_pos1}, y-coordinate of {_pos2}))
+    set {_minZ} to floor(min(z-coordinate of {_pos1}, z-coordinate of {_pos2}))
+    set {_maxZ} to floor(max(z-coordinate of {_pos1}, z-coordinate of {_pos2}))
+    set {_x} to {_minX}
+    while {_x} <= {_maxX}:
+        set {_y} to {_minY}
+        while {_y} <= {_maxY}:
+            set {_z} to {_minZ}
+            while {_z} <= {_maxZ}:
+                set {_block} to block at location({_x}, {_y}, {_z}, {_world})
+                if {_block} is water:
+                    set block at location({_x}, {_y}, {_z}, {_world}) to air
+                else if {_block} is lava:
+                    set block at location({_x}, {_y}, {_z}, {_world}) to air
+                add 1 to {_z}
+            add 1 to {_y}
+        add 1 to {_x}
+
+function replaceBlocks(pos1: location, pos2: location, oldBlock: item, newBlock: item, p: player):
+    set {_world} to world of {_pos1}
+    set {_minX} to floor(min(x-coordinate of {_pos1}, x-coordinate of {_pos2}))
+    set {_maxX} to floor(max(x-coordinate of {_pos1}, x-coordinate of {_pos2}))
+    set {_minY} to floor(min(y-coordinate of {_pos1}, y-coordinate of {_pos2}))
+    set {_maxY} to floor(max(y-coordinate of {_pos1}, y-coordinate of {_pos2}))
+    set {_minZ} to floor(min(z-coordinate of {_pos1}, z-coordinate of {_pos2}))
+    set {_maxZ} to floor(max(z-coordinate of {_pos1}, z-coordinate of {_pos2}))
+    set {_count} to 0
+    set {_x} to {_minX}
+    while {_x} <= {_maxX}:
+        set {_y} to {_minY}
+        while {_y} <= {_maxY}:
+            set {_z} to {_minZ}
+            while {_z} <= {_maxZ}:
+                set {_block} to block at location({_x}, {_y}, {_z}, {_world})
+                if {_block} is {_oldBlock}:
+                    set block at location({_x}, {_y}, {_z}, {_world}) to {_newBlock}
+                    add 1 to {_count}
+                add 1 to {_z}
+            add 1 to {_y}
+        add 1 to {_x}
+    send "{@prefix} &aReplaced %{_count}% blocks of %{_oldBlock}% with %{_newBlock}%" to {_p}
+
+function replaceAllExceptAir(pos1: location, pos2: location, newBlock: item, p: player):
+    set {_world} to world of {_pos1}
+    set {_minX} to floor(min(x-coordinate of {_pos1}, x-coordinate of {_pos2}))
+    set {_maxX} to floor(max(x-coordinate of {_pos1}, x-coordinate of {_pos2}))
+    set {_minY} to floor(min(y-coordinate of {_pos1}, y-coordinate of {_pos2}))
+    set {_maxY} to floor(max(y-coordinate of {_pos1}, y-coordinate of {_pos2}))
+    set {_minZ} to floor(min(z-coordinate of {_pos1}, z-coordinate of {_pos2}))
+    set {_maxZ} to floor(max(z-coordinate of {_pos1}, z-coordinate of {_pos2}))
+    set {_count} to 0
+    set {_x} to {_minX}
+    while {_x} <= {_maxX}:
+        set {_y} to {_minY}
+        while {_y} <= {_maxY}:
+            set {_z} to {_minZ}
+            while {_z} <= {_maxZ}:
+                set {_block} to block at location({_x}, {_y}, {_z}, {_world})
+                if {_block} is not air:
+                    set block at location({_x}, {_y}, {_z}, {_world}) to {_newBlock}
+                    add 1 to {_count}
+                add 1 to {_z}
+            add 1 to {_y}
+        add 1 to {_x}
+    send "{@prefix} &aReplaced %{_count}% non-air blocks with %{_newBlock}%" to {_p}
+
+# Copy function
+function copyRegion(pos1: location, pos2: location, p: player) :: text:
+    set {_world} to world of {_pos1}
+    set {_minX} to floor(min(x-coordinate of {_pos1}, x-coordinate of {_pos2}))
+    set {_maxX} to floor(max(x-coordinate of {_pos1}, x-coordinate of {_pos2}))
+    set {_minY} to floor(min(y-coordinate of {_pos1}, y-coordinate of {_pos2}))
+    set {_maxY} to floor(max(y-coordinate of {_pos1}, y-coordinate of {_pos2}))
+    set {_minZ} to floor(min(z-coordinate of {_pos1}, z-coordinate of {_pos2}))
+    set {_maxZ} to floor(max(z-coordinate of {_pos1}, z-coordinate of {_pos2}))
+    set {_clipboard} to ""
+    set {_count} to 0
+    set {_x} to {_minX}
+    while {_x} <= {_maxX}:
+        set {_y} to {_minY}
+        while {_y} <= {_maxY}:
+            set {_z} to {_minZ}
+            while {_z} <= {_maxZ}:
+                set {_block} to block at location({_x}, {_y}, {_z}, {_world})
+                set {_blockData} to "%{_block}%"
+                set {_clipboard} to "%{_clipboard}%%{_blockData}%:%{_x}%,%{_y}%,%{_z}%;"
+                add 1 to {_count}
+                add 1 to {_z}
+            add 1 to {_y}
+        add 1 to {_x}
+    send "&aCopied %{_count}% blocks" to {_p}
+    return {_clipboard}
+
+# New Replace Commands
+command /replace <item> <item>:
+    permission: simpleedit.use
+    usage: /replace <old_block> <new_block>
+    trigger:
+        if check_edit_mode(player) is false:
+            stop
+        set {_oldBlock} to arg-1
+        set {_newBlock} to arg-2
+        if {_oldBlock} is not set:
+            send "{@prefix} &cInvalid old block type specified" to player
+            stop
+        if {_newBlock} is not set:
+            send "{@prefix} &cInvalid new block type specified" to player
+            stop
+        replaceBlocks({SimpleEdit::pos1::%player's uuid%}, {SimpleEdit::pos2::%player's uuid%}, {_oldBlock}, {_newBlock}, player)
+
+command /replaceall <item>:
+    permission: simpleedit.use
+    usage: /replaceall <new_block>
+    trigger:
+        if check_edit_mode(player) is false:
+            stop
+        set {_newBlock} to arg-1
+        if {_newBlock} is not set:
+            send "{@prefix} &cInvalid block type specified" to player
+            stop
+        replaceAllExceptAir({SimpleEdit::pos1::%player's uuid%}, {SimpleEdit::pos2::%player's uuid%}, {_newBlock}, player)
+
+
+# Update the help command to include the new commands
+command /simpleedit:
+    trigger:
+        send "&7====SimpleEdit Help====" to player
+        send "&b/simpleedit &7- &aSends this message" to player
+        send "&b/do [block] &7- &aSets block in the selected area" to player
+        send "&b/cube [block] &7- &aCreates a hollow cube in the selected area" to player
+        send "&b/walls [block] &7- &aMakes walls. Thats it." to player
+        send "&b/pos1 &7- &aSets position 1 to your current location" to player
+        send "&b/pos2 &7- &aSets position 2 to your current location" to player
+        send "&b/drain &7- &aRemoves water and lava from the selected area" to player
+        send "&b/edit &7- &aToggle edit mode" to player
+        send "&b/copy &7- &aCopies the selected region" to player
+        send "&b/paste &7- &aPastes the copied region at your location" to player
+        send "&b/replace [old_block] [new_block] &7- &aReplaces specified blocks in the selected area" to player
+        send "&b/replaceall [new_block] &7- &aReplaces all non-air blocks in the selected area" to player
+        send "&7====SimpleEdit Help====" to player
+        send "&cPlease be aware that this version of SimpleEdit" to player
+        send "&cis still in development." to player
+        send "&c&lAdditional features may be added in future updates." to player
+        send "&aScroll up to see more!"
